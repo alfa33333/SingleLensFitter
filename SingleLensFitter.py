@@ -511,6 +511,73 @@ class SingleLensFitter():
 		return converged
 
 
+	def lnprior_nest(self,cube):
+
+		#prior for hypercube for the main parameters, flat priors.
+		cube[0]= cube[0]*(self.u0_limits[1] - self.u0_limits[0]) + self.u0_limits[0]
+		cube[1]= cube[1]*(self.data[self.data.keys()[0]][0][-1]-self.data[self.data.keys()[0]][0][0])+ self.data[self.data.keys()[0]][0][0]
+		cube[2]= cube[2]*(self.tE_limits[1] - self.tE_limits[0]) + self.tE_limits[0]
+
+		return cube
+
+	def lnlike_nest(self,cube):#Likelihood function to evaluate for nested. 
+		lnprob = 0.0
+
+		for data_set_name in self.data.keys():
+
+			t, y, yerr = self.data[data_set_name]
+			mag = self.magnification(t,p = cube)
+
+			if self.use_gaussian_process_model:
+				a = np.exp(self.ln_a[data_set_name])
+				tau = np.exp(self.ln_tau[data_set_name])
+				gp = george.GP(a * kernels.ExpKernel(tau))
+				gp.compute(t, yerr)
+				self.cov = gp.get_matrix(t)
+				result, lp = self.linear_fit(data_set_name,mag)
+				model = self.compute_lightcurve(data_set_name,t)
+				lnprob = gp.lnlikelihood(y-model)
+
+			else:
+				result, lp = self.linear_fit(data_set_name,mag)
+				lnprob += lp
+
+		return lnprob 
+
+	def Nested(self):# Nested sampling main calling method.
+		if self.p is None:
+			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
+			return None
+		#prints the boundary to be used for the prior
+		t0lim,_,_ = self.data[self.data.keys()[0]]
+		print('Prior boundaries:')
+		print('u_0 = [%f , %f]'% self.u0_limits)
+		print('t_0 = [%f , %f]'% (t0lim[0],t0lim[-1]))
+		print('t_E = [%f , %f]'% self.tE_limits)
+
+		#basic parameters to run the sampler
+		nlive = 600 # livepoints.
+		ndim = self.ndim #number of dimensions
+		tol = 0.01 #stopping criterion
+
+		#run the algorithm
+		result =solve(LogLikelihood=self.lnlike_nest,Prior=self.lnprior_nest,
+					n_dims=ndim,outputfiles_basename=self.plotprefix,
+					n_live_points=nlive,
+					evidence_tolerance=tol,
+					verbose=True)
+		u0line = result['samples'].T
+		print('')
+		print('evidence:%(logZ).f +- %(logZerr).1f' % result )
+		print('')
+		print('parameter values:')
+		for name, col in zip(self.parameter_labels,u0line):
+			print('%15s : %.3f +- %.3f' %(name,col.mean(),col.std()))
+		#print(result)
+		#print(np.mean(u0line.T))
+		return
+
+
 
 
 
