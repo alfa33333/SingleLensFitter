@@ -17,7 +17,7 @@ import corner
 from astropy.stats import mad_std
 
 from scipy.interpolate import interp1d
-from pymultines import solve 
+from pymultinest import solve 
 
 class SingleLensFitter():
 
@@ -559,7 +559,7 @@ class SingleLensFitter():
 		nlive = 600 # livepoints.
 		ndim = self.ndim #number of dimensions
 		tol = 0.01 #stopping criterion
-
+		print('')
 		#run the algorithm
 		result =solve(LogLikelihood=self.lnlike_nest,Prior=self.lnprior_nest,
 					n_dims=ndim,outputfiles_basename=self.plotprefix,
