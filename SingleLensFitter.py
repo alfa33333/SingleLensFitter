@@ -556,6 +556,7 @@ class SingleLensFitter():
 		print('t_E = [%f , %f]'% self.tE_limits)
 
 		#basic parameters to run the sampler
+		#This parameters will be moved to the class.
 		nlive = 600 # livepoints.
 		ndim = self.ndim #number of dimensions
 		tol = 0.01 #stopping criterion
@@ -573,12 +574,8 @@ class SingleLensFitter():
 		print('parameter values:')
 		for name, col in zip(self.parameter_labels,u0line):
 			print('%15s : %.3f +- %.3f' %(name,col.mean(),col.std()))
-		#print(result)
-		#print(np.mean(u0line.T))
+
 		return
-
-
-
 
 
 	def fit(self):
