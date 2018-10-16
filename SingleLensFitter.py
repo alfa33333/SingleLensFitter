@@ -17,7 +17,7 @@ import corner
 from astropy.stats import mad_std
 
 from scipy.interpolate import interp1d
-
+from pymultines import solve 
 
 class SingleLensFitter():
 
