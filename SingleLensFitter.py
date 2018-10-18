@@ -18,6 +18,11 @@ from astropy.stats import mad_std
 
 from scipy.interpolate import interp1d
 from pymultinest import solve 
+import dynesty
+from dynesty import NestedSampler
+from dynesty.utils import resample_equal
+
+import nestle
 
 class SingleLensFitter():
 
@@ -511,8 +516,9 @@ class SingleLensFitter():
 		return converged
 
 
-	def lnprior_nest(self,cube):
+	def lnprior_nest(self,ucube):
 
+		cube = np.copy(ucube)
 		#prior for hypercube for the main parameters, flat priors.
 		cube[0]= cube[0]*(self.u0_limits[1] - self.u0_limits[0]) + self.u0_limits[0]
 		cube[1]= cube[1]*(self.data[self.data.keys()[0]][0][-1]-self.data[self.data.keys()[0]][0][0])+ self.data[self.data.keys()[0]][0][0]
@@ -577,6 +583,84 @@ class SingleLensFitter():
 
 		return
 
+	def dnesty(self):#Nested sampling using Dynesty
+		if self.p is None:
+			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
+			return None
+		#prints the boundary to be used for the prior
+		t0lim,_,_ = self.data[self.data.keys()[0]]
+		print('Prior boundaries:')
+		print('u_0 = [%f , %f]'% self.u0_limits)
+		print('t_0 = [%f , %f]'% (t0lim[0],t0lim[-1]))
+		print('t_E = [%f , %f]'% self.tE_limits)
+
+		#basic parameters to run the sampler
+		print('')
+		print('dynesty version: {}'.format(dynesty.__version__))
+		#This parameters will be moved to the class.
+		nlive = 400 # livepoints.
+		bound = 'multi'
+		ndim = self.ndim #number of dimensions
+		sample = 'rwalk'
+		tol = 1.0 #stopping criterion
+		print('')
+		#Create sampler
+		sampler = NestedSampler(self.lnlike_nest,self.lnprior_nest,ndim,
+				bound=bound,sample=sample,nlive=nlive)
+
+		#run sampler
+		sampler.run_nested(dlogz=tol, print_progress=True) # Output the progress bar
+
+		res = sampler.results # get results dictionary from sampler
+
+		logZdynesty = res.logz[-1]        # value of logZ
+		logZerrdynesty = res.logzerr[-1]  # estimate of the statistcal uncertainty on logZ
+
+		# draw posterior samples
+		weights = np.exp(res['logwt'] - res['logz'][-1])
+		samples_dynesty = resample_equal(res.samples, weights)
+
+		#print results
+
+		output = (logZdynesty, logZerrdynesty)
+		print()
+		print('evidence: %.3f +- %.3f' % (logZdynesty, logZerrdynesty) )
+		print()
+		print(res.summary())
+		print()
+		print('parameter values:')
+		#for name, col in zip(parameters, samples_dynesty.transpose()):
+		#	print('%15s : %.3f +- %.3f' % (name, col.mean(), col.std()))
+		print('%15s : %.3f +- %.3f' % (self.parameter_labels[0],np.mean(samples_dynesty[:,0]),np.std(samples_dynesty[:,0])) )
+		print('%15s : %.3f +- %.3f' % (self.parameter_labels[1],np.mean(samples_dynesty[:,1]),np.std(samples_dynesty[:,1])) )
+		print('%15s : %.3f +- %.3f' % (self.parameter_labels[2],np.mean(samples_dynesty[:,2]),np.std(samples_dynesty[:,2])) )
+
+
+
+		return
+
+	def nestling(self):
+		# Run nested sampling.
+		#rstate = np.random.RandomState(1)
+		result = nestle.sample(self.lnlike_nest, self.lnprior_nest,
+				3, npoints=400,method= 'multi',
+				callback = nestle.print_progress)
+		print(result.summary())
+
+		nweights = result.weights/np.max(result.weights)
+		# re-scale weights to have a maximum of one
+		nweights = result.weights/np.max(result.weights)
+'
+		# get the probability of keeping a sample from the weights
+		keepidx = np.where(np.random.rand(len(nweights)) < nweights)[0]
+
+		# get the posterior samples
+		samples_nestle = result.samples[keepidx,:]
+
+		print np.mean(samples_nestle[:,0])
+		print np.mean(samples_nestle[:,1])
+		print np.mean(samples_nestle[:,2])
+		return
 
 	def fit(self):
 		
