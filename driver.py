@@ -3,7 +3,7 @@ import numpy as np
 import SingleLensFitter as slf
 import matplotlib.pyplot as plt
 import os
-
+from time import time
 
 # Basic necesary information to run the fitter.
 data_source = "/home/alfa33333/Program/SingleLensFitter-master/bul-01/1998/bul-01/phot.dat"
@@ -31,11 +31,17 @@ def main():
     data['site1'] = (date(d1),flux(d1),error(d1))
 
     #Instance to the fitter
-    fitter = slf.SingleLensFitter(data,[0.16,18,50.])
+    fitter = slf.SingleLensFitter(data,[0.16,880.,50.])
     fitter.plotprefix = folder+file_prefix
 
     #Running sampler
-    fitter.Nested()
+    t0 = time()
+	#fitter.fit() Fully functional emcee
+	#fitter.Nested() beta Pymultinest
+	#fitter.dynesty() beta dynesty
+	#fitter.nestling() beta nestle
+    t1 = time()
 
+    print('Sampling time: %.3f'%(t1-t0))
 if __name__=='__main__':
     main()
