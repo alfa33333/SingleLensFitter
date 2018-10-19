@@ -6,7 +6,7 @@ import os
 from time import time
 
 # Basic necesary information to run the fitter.
-data_source = "/home/alfa33333/Program/SingleLensFitter-master/bul-01/1998/bul-01/phot.dat"
+data_source = "data/1998/bul-01/phot.dat"
 #("/home/alfa33333/Program/SingleLensFitter-master/blg-001/2002/blg-001/phot.dat")
 base = 15.702 #Base line for the flux.
 folder = '' #path to the folder to save.
@@ -36,10 +36,10 @@ def main():
 
     #Running sampler
     t0 = time()
-	#fitter.fit() Fully functional emcee
-	#fitter.Nested() beta Pymultinest
-	#fitter.dynesty() beta dynesty
-	#fitter.nestling() beta nestle
+	#fitter.fit() #Fully functional emcee
+	#fitter.Nested() #beta Pymultinest
+	#fitter.dynesty() #beta dynesty
+    fitter.nestling() #beta nestle
     t1 = time()
 
     print('Sampling time: %.3f'%(t1-t0))

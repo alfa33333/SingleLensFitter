@@ -127,7 +127,16 @@ class SingleLensFitter():
 					'#4c804c', '#804d80', '#ffdb98', '#a56262', '#CCFF66', '#CC9900', '#9966FF', '#FF3366']
 
 		return
+	#------------------------------------------------
+	#Extra utilities
+	def fwrite(extension,parameter_labels,parameters):
+		with open(self.plotprefix+'.fit_results','w') as fid:
+			fid.write('u0 %f %f %f\n'%(params[0][0],params[0][1],params[0][2]))
+			fid.write('t0 %f %f %f\n'%(params[1][0],params[1][1],params[1][2]))
+			fid.write('tE %f %f %f\n'%(params[2][0],params[2][1],params[2][2]))
 
+
+	#------------------------------------------------
 
 	def add_finite_source(self,lrho=None):
 
@@ -640,26 +649,55 @@ class SingleLensFitter():
 		return
 
 	def nestling(self):
+		if self.p is None:
+			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
+			return None
+		#prints the boundary to be used for the prior
+		t0lim ,_ ,_ = self.data[self.data.keys()[0]]
+		print('Prior boundaries:')
+		print('u_0 = [%f , %f]'% self.u0_limits)
+		print('t_0 = [%f , %f]'% (t0lim[0],t0lim[-1]))
+		print('t_E = [%f , %f]'% self.tE_limits)
+
+		#basic parameters to run the sampler
+		print('')
+		print('Nestle version: {}'.format(nestle.__version__))
+		#This parameters will be moved to the class.
+		nlive = 400 # livepoints.
+		bound = 'multi' #bounding options
+		ndim = self.ndim #number of dimensions
+		tol = 1.0 #stopping criterion
+
+		print('')
+		print('nlive: %.3f' % nlive)
+		print('Bounding method: %5s' % bound)
+		print('Number of dimensions: %.3f' % ndim)
+		print('stopping tolerance dlogz: %.3f' % tol)
+		print('')
+
 		# Run nested sampling.
 		#rstate = np.random.RandomState(1)
 		result = nestle.sample(self.lnlike_nest, self.lnprior_nest,
-				3, npoints=400,method= 'multi',
+				ndim, npoints=nlive,method= bound,
 				callback = nestle.print_progress)
 		print(result.summary())
 
 		nweights = result.weights/np.max(result.weights)
 		# re-scale weights to have a maximum of one
 		nweights = result.weights/np.max(result.weights)
-'
+
 		# get the probability of keeping a sample from the weights
 		keepidx = np.where(np.random.rand(len(nweights)) < nweights)[0]
 
 		# get the posterior samples
 		samples_nestle = result.samples[keepidx,:]
 
-		print np.mean(samples_nestle[:,0])
-		print np.mean(samples_nestle[:,1])
-		print np.mean(samples_nestle[:,2])
+		#printin results
+		print('Parameter values:')
+		for i in range(len(self.parameter_labels)):
+			print('%10s : %.3f' % (self.parameter_labels[i],
+						  np.mean(samples_nestle[:,i])))
+
 		return
 
 	def fit(self):
