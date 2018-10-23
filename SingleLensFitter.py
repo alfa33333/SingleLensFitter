@@ -18,10 +18,6 @@ from astropy.stats import mad_std
 
 from scipy.interpolate import interp1d
 from pymultinest import solve 
-import dynesty
-from dynesty import NestedSampler
-from dynesty.utils import resample_equal
-
 import nestle
 
 class SingleLensFitter():
@@ -126,14 +122,50 @@ class SingleLensFitter():
 		self.plot_colours = ['#FF0000', '#000000', '#008000', '#800080', '#FFA500', '#A52A2A', '#ff9999', '#999999', \
 					'#4c804c', '#804d80', '#ffdb98', '#a56262', '#CCFF66', '#CC9900', '#9966FF', '#FF3366']
 
+		#Nested parameters.
+		self.nlive = 400 # livepoints.
+		self.bound = 'multi' #bounding options = 'single', 'multi'
+		self.tol = 1.0 #stopping criterion for nested sampling  dlogz
+
+
+
 		return
 	#------------------------------------------------
 	#Extra utilities
-	def fwrite(extension,parameter_labels,parameters):
-		with open(self.plotprefix+'.fit_results','w') as fid:
-			fid.write('u0 %f %f %f\n'%(params[0][0],params[0][1],params[0][2]))
-			fid.write('t0 %f %f %f\n'%(params[1][0],params[1][1],params[1][2]))
-			fid.write('tE %f %f %f\n'%(params[2][0],params[2][1],params[2][2]))
+	def fcreate(self,filename):
+		with open(self.plotprefix+filename,'w') as fid:
+			fid.write('\n')
+		fid.close()
+		return None
+
+	def fwrite(self,parameter_labels,parameters):
+		with open(self.plotprefix+'.fit_results','a+') as fid:
+			for i in range(len(parameter_labels)):
+				fid.write('%s %f %f %f\n'%(parameter_labels[i],
+							   parameters[i][0],parameters[i][1],parameters[i][2]))
+
+		fid.close()
+		return None
+
+	def fappend(self,label,data):
+		''' label  = A message or a series of labels
+			data   = A 2D numpy array to output '''
+		with open(self.plotprefix+'.fit_results','a+') as fid:
+			if not isinstance(data , np.ndarray):
+				#This is just for messages
+				fid.write('%s \n' % label )
+			else:
+				if len(data.shape) == 2:
+					for i in range(len(label)):
+						fid.write('%s '%(label[i]))
+						for j in range(data.shape[1]):
+							fid.write(' %.3f'%data[i,j])
+						fid.write('\n')
+				else:
+					for i in range(len(label)):
+						fid.write('%s %.3f\n'%(label[i],data[i]))
+		fid.close()
+		return None
 
 
 	#------------------------------------------------
@@ -593,6 +625,11 @@ class SingleLensFitter():
 		return
 
 	def dnesty(self):#Nested sampling using Dynesty
+		import dynesty
+		from dynesty import NestedSampler
+		from dynesty.utils import resample_equal
+
+
 		if self.p is None:
 			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
 			return None
@@ -649,6 +686,11 @@ class SingleLensFitter():
 		return
 
 	def nestling(self):
+		if (self.add_finite_source or self.add_mixture_model or \
+		self.add_mixture_model) is True:
+			raise Exception('Error in SingleLensFitter.nestling(): feature is not yet implemented.')
+			return None
+
 		if self.p is None:
 			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
 			return None
@@ -663,15 +705,15 @@ class SingleLensFitter():
 		print('')
 		print('Nestle version: {}'.format(nestle.__version__))
 		#This parameters will be moved to the class.
-		nlive = 400 # livepoints.
-		bound = 'multi' #bounding options
+		nlive = self.nlive # livepoints.
+		bound = self.bound #bounding options
 		ndim = self.ndim #number of dimensions
-		tol = 1.0 #stopping criterion
+		tol = self.tol #stopping criterion
 
 		print('')
-		print('nlive: %.3f' % nlive)
+		print('nlive: %i' % nlive)
 		print('Bounding method: %5s' % bound)
-		print('Number of dimensions: %.3f' % ndim)
+		print('Number of dimensions: %i' % ndim)
 		print('stopping tolerance dlogz: %.3f' % tol)
 		print('')
 
@@ -680,9 +722,10 @@ class SingleLensFitter():
 		result = nestle.sample(self.lnlike_nest, self.lnprior_nest,
 				ndim, npoints=nlive,method= bound,
 				callback = nestle.print_progress)
+		print('')
+		print('Results summary:')
 		print(result.summary())
 
-		nweights = result.weights/np.max(result.weights)
 		# re-scale weights to have a maximum of one
 		nweights = result.weights/np.max(result.weights)
 
@@ -691,13 +734,58 @@ class SingleLensFitter():
 
 		# get the posterior samples
 		samples_nestle = result.samples[keepidx,:]
+		equallike_nestle = result.logl[keepidx]
+		self.samples = samples_nestle
+		ML = samples_nestle[np.where(equallike_nestle == \
+							   np.max(equallike_nestle))[0]]
+		#Saving
+		bufferarray = np.zeros((result.samples.shape[0],
+						  result.samples.shape[1]+2))
+		bufferarray[:,0:result.samples.shape[1]] = result.samples
+		bufferarray[:,result.samples.shape[1]] = result.weights
+		bufferarray[:,result.samples.shape[1]+1] = result.logl
+		np.save(self.plotprefix+'-vol',result.logvol)
 
-		#printin results
+			#saving complete sample data
+		np.save(self.plotprefix+'-Samples',bufferarray)
+
+			#saving equally  weighted samples
+
+		bufferarray = np.zeros((samples_nestle.shape[0],
+						 samples_nestle.shape[1]+1))
+		bufferarray[:,0:samples_nestle.shape[1]] = samples_nestle
+		bufferarray[:,samples_nestle.shape[1]] = equallike_nestle
+		np.savetxt(self.plotprefix+'-output_equal.txt',bufferarray)
+
+		params = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), \
+								zip(*np.percentile(samples_nestle, \
+								[16, 50, 84], axis=0)))
+
+		self.p = np.asarray(params)[:,0]
+
+		self.u0 = self.p[0]
+		self.t0 = self.p[1]
+		self.tE = self.p[2]
+
+		#rewriting the initial parameters  for plotting
+		self.initial_parameters = [self.u0,self.t0,self.tE]
+
+		if self.make_plots:
+
+			self.plot_lightcurves()
+			self.plot_chain_corner()
+
+
+		#printing results
 		print('Parameter values:')
+		self.fcreate('.fit_results')
+		self.fappend('Parameter values:',None)
+		self.fwrite(self.parameter_labels,params)
+		self.fappend('Maximum likelihood parameters:',None)
+		self.fappend(np.array(['']),ML)
 		for i in range(len(self.parameter_labels)):
 			print('%10s : %.3f' % (self.parameter_labels[i],
-						  np.mean(samples_nestle[:,i])))
-
+						  self.p[i]))
 		return
 
 	def fit(self):

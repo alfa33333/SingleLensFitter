@@ -7,9 +7,8 @@ from time import time
 
 # Basic necesary information to run the fitter.
 data_source = "data/1998/bul-01/phot.dat"
-#("/home/alfa33333/Program/SingleLensFitter-master/blg-001/2002/blg-001/phot.dat")
 base = 15.702 #Base line for the flux.
-folder = '' #path to the folder to save.
+folder = './data/' #path to the folder to save.
 file_prefix = 'test' #prefix of the saved files.
 
 def date(d1):#Obtains the date from the data
@@ -37,7 +36,7 @@ def main():
     #Running sampler
     t0 = time()
 	#fitter.fit() #Fully functional emcee
-	#fitter.Nested() #beta Pymultinest
+    #fitter.Nested() #beta Pymultinest
 	#fitter.dynesty() #beta dynesty
     fitter.nestling() #beta nestle
     t1 = time()
