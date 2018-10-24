@@ -788,19 +788,14 @@ class SingleLensFitter():
 		self.fwrite(self.parameter_labels,params)
 		self.fappend('Maximum likelihood parameters:',None)
 		self.fappend(np.array(['']),ML)
-        if self.use_finite_source:
+		if self.use_finite_source:
 			pi = self.finite_source_index
-            pitemp = np.asarray([params[pi][0],params[pi][1],params[pi][2]])
-            self.fappend(np.array(['rho: ']),pitemp)
-
-
+			pitemp = np.asarray([params[pi][0],params[pi][1],params[pi][2]])
+			self.fappend(np.array(['rho: ']),pitemp)
 		for i in range(len(self.parameter_labels)):
-			print('%10s : %.3f' % (self.parameter_labels[i],
-						  self.p[i]))
-        if self.use_finite_source:
-			print 'rho', params[self.finite_source_index]
-
-
+			print('%10s : %.3f' % (self.parameter_labels[i],self.p[i]))
+			if self.use_finite_source:
+				print 'rho', params[self.finite_source_index]
 		return
 
 	def fit(self):
