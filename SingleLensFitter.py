@@ -17,7 +17,6 @@ import corner
 from astropy.stats import mad_std
 
 from scipy.interpolate import interp1d
-from pymultinest import solve 
 import nestle
 
 class SingleLensFitter():
@@ -592,6 +591,8 @@ class SingleLensFitter():
 		return lnprob 
 
 	def Nested(self):# Nested sampling main calling method.
+		from pymultinest import solve 
+
 		if self.p is None:
 			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
 			return None
@@ -758,7 +759,7 @@ class SingleLensFitter():
 		np.savetxt(self.plotprefix+'-output_equal.txt',bufferarray)
 
 		params = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), \
-								zip(*np.percentile(samples_nestle, \
+								zip(*np.percentile(samples_nestle[:,:4], \
 								[16, 50, 84], axis=0)))
 
 		self.p = np.asarray(params)[:,0]
@@ -766,12 +767,16 @@ class SingleLensFitter():
 		self.u0 = self.p[0]
 		self.t0 = self.p[1]
 		self.tE = self.p[2]
-
-		#rewriting the initial parameters  for plotting
+        		#rewriting the initial parameters  for plotting
 		self.initial_parameters = [self.u0,self.t0,self.tE]
+
+		if self.use_finite_source:
+			self.rho = self.p[self.finite_source_index]
+
 
 		if self.make_plots:
 
+			self.plot_combined_lightcurves()
 			self.plot_lightcurves()
 			self.plot_chain_corner()
 
@@ -783,9 +788,19 @@ class SingleLensFitter():
 		self.fwrite(self.parameter_labels,params)
 		self.fappend('Maximum likelihood parameters:',None)
 		self.fappend(np.array(['']),ML)
+        if self.use_finite_source:
+			pi = self.finite_source_index
+            pitemp = np.asarray([params[pi][0],params[pi][1],params[pi][2]])
+            self.fappend(np.array(['rho: ']),pitemp)
+
+
 		for i in range(len(self.parameter_labels)):
 			print('%10s : %.3f' % (self.parameter_labels[i],
 						  self.p[i]))
+        if self.use_finite_source:
+			print 'rho', params[self.finite_source_index]
+
+
 		return
 
 	def fit(self):
@@ -827,7 +842,7 @@ class SingleLensFitter():
 
 		while not converged and iteration < self.max_burnin_iterations:
 
-			self.state, lnp , _ =sampler.run_mcmc(self.state,self.nsteps,progress =True)
+			self.state, lnp , _=sampler.run_mcmc(self.state,self.nsteps,progress =False)
 
 			iteration += 1
 			print 'iteration', iteration, 'completed'
