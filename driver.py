@@ -9,7 +9,7 @@ from time import time
 data_source = "data/1998/bul-01/phot.dat"
 base = 15.702 #Base line for the flux.
 folder = './data/' #path to the folder to save.
-file_prefix = 'test' #prefix of the saved files.
+file_prefix = 'nested' #prefix of the saved files.
 
 def date(d1):#Obtains the date from the data
     return  d1[:,0]-2450000
@@ -30,12 +30,17 @@ def main():
     data['site1'] = (date(d1),flux(d1),error(d1))
 
     #Instance to the fitter
-    fitter = slf.SingleLensFitter(data,[0.16,880.,50.])
+    fitter = slf.SingleLensFitter(data,[0.10,900.,56.])
+	#--delete
+    #fitter.nwalkers = 100
+    #fitter.nsteps = 100
+    #fitter.add_mixture_model()
+	#--delete
     fitter.plotprefix = folder+file_prefix
 
     #Running sampler
     t0 = time()
-	#fitter.fit() #Fully functional emcee
+    #fitter.fit() #Fully functional emcee
     #fitter.Nested() #beta Pymultinest
 	#fitter.dynesty() #beta dynesty
     fitter.nestling() #beta nestle
