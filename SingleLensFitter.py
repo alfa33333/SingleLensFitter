@@ -837,7 +837,7 @@ class SingleLensFitter():
 
 		while not converged and iteration < self.max_burnin_iterations:
 
-			self.state, lnp , _=sampler.run_mcmc(self.state,self.nsteps,progress =False)
+			self.state, lnp ,_=sampler.run_mcmc(self.state,self.nsteps)
 
 			iteration += 1
 			print 'iteration', iteration, 'completed'
