@@ -879,7 +879,7 @@ class SingleLensFitter():
 
 		sampler.reset()
 
-		self.state, lnp, _ = sampler.run_mcmc(self.state,self.nsteps_production,progress =True)
+		self.state, lnp, _ = sampler.run_mcmc(self.state,self.nsteps_production)
 
 		self.samples = sampler.flatchain
 
