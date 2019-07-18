@@ -62,6 +62,7 @@ class SingleLensFitter():
 			if reference_source in self.data:
 
 				self.reference_source = reference_source
+				print('Using',self.reference_source,'as reference.')
 
 			else:
 
@@ -127,6 +128,13 @@ class SingleLensFitter():
 		self.nlive = 1000 # livepoints.
 		self.bound = 'multi' #bounding options = 'single', 'multi'
 		self.tol = 0.01 #stopping criterion for nested sampling  dlogz
+		
+		self.t0t1extlim = False
+		self.t02_limits = None
+		self.sampletype = 'rwalk'
+
+		#Parallel parameters
+		self.cpu = None
 		self.dynestyparallel = False
 
 		#Binary source parameters
@@ -729,12 +737,18 @@ class SingleLensFitter():
 		cube = np.copy(ucube)
 		#prior for hypercube for the main parameters, flat priors.
 		cube[0]= cube[0]*(self.u0_limits[1] - self.u0_limits[0]) + self.u0_limits[0]
-		cube[1]= cube[1]*(self.data[list(self.data.keys())[0]][0][-1]-self.data[list(self.data.keys())[0]][0][0])+ self.data[list(self.data.keys())[0]][0][0]
+		if self.t0t1extlim:
+			cube[1]= cube[1]*(self.t0_limits[1]-self.t0_limits[0]) + self.t0_limits[0]
+		else:
+			cube[1]= cube[1]*(self.data[list(self.data.keys())[0]][0][-1]-self.data[list(self.data.keys())[0]][0][0])+ self.data[list(self.data.keys())[0]][0][0]
 		cube[2]= cube[2]*(self.tE_limits[1] - self.tE_limits[0]) + self.tE_limits[0]
 		if self.use_binary_source is True:
 			cube[3] = cube[3]*(self.dist_limits[1] - self.dist_limits[0]) + self.dist_limits[0]
 			if self.binary_both:
-				cube[4] = cube[4]*(self.data[list(self.data.keys())[0]][0][-1]-self.data[list(self.data.keys())[0]][0][0])+ self.data[list(self.data.keys())[0]][0][0]
+				if self.t0t1extlim and (self.t02_limits is not None) :
+					cube[4] = cube[4]*(self.t02_limits[1]-self.t02_limits[0]) + self.t02_limits[0]
+				else:
+					cube[4] = cube[4]*(self.data[list(self.data.keys())[0]][0][-1]-self.data[list(self.data.keys())[0]][0][0])+ self.data[list(self.data.keys())[0]][0][0]
 			else:
 				cube[4] = cube[4]*(self.thetabin_limits[1] - self.thetabin_limits[0]) + self.thetabin_limits[0]
 			cube[5] = cube[5]*(self.qlum_limits[1] - self.qlum_limits[0]) + self.qlum_limits[0]
@@ -771,9 +785,11 @@ class SingleLensFitter():
 
 		if self.p is None:
 			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
-			return 
 		#prints the boundary to be used for the prior
-		t0lim,_,_ = self.data[list(self.data.keys())[0]]
+		if self.t0t1extlim:
+			t0lim = self.t0_limits
+		else:
+			t0lim,_,_ = self.data[list(self.data.keys())[0]]
 		print('Prior boundaries:')
 		print(('u_0 = [%f , %f]'% self.u0_limits))
 		print(('t_0 = [%f , %f]'% (t0lim[0],t0lim[-1])))
@@ -810,9 +826,11 @@ class SingleLensFitter():
 
 		if self.p is None:
 			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
-			return None
 		#prints the boundary to be used for the prior
-		t0lim ,_ ,_ = self.data[list(self.data.keys())[0]]
+		if self.t0t1extlim:
+			t0lim = self.t0_limits
+		else:
+			t0lim,_,_ = self.data[list(self.data.keys())[0]]
 		print('Prior boundaries:')
 		print(('u_0 = [%f , %f]'% self.u0_limits))
 		print(('t_0 = [%f , %f]'% (t0lim[0],t0lim[-1])))
@@ -820,7 +838,11 @@ class SingleLensFitter():
 		if self.use_binary_source is True:
 			if self.binary_both:
 				print(('u_02 = [%f , %f]'% self.dist_limits))
-				print(('t_02 = [%f , %f]'% self.thetabin_limits))
+				if self.t0t1extlim and (self.t02_limits is not None):
+					t02lim = self.t02_limits
+				else:
+					t02lim,_,_ = self.data[list(self.data.keys())[0]]
+				print(('t_02 = [%f , %f]'% (t02lim[0],t02lim[-1])))
 				print(('q = [%f , %f]'% self.qlum_limits))
 			else:
 				print(('d = [%f , %f]'% self.dist_limits))
@@ -834,7 +856,7 @@ class SingleLensFitter():
 		bound = self.bound #bounding options
 		ndim = self.ndim #number of dimensions
 		tol = self.tol #stopping criterion
-		sample = "rslice" #'rwalk' #sample type
+		sample = self.sampletype #"rwalk" #'rwalk' #sample type
 		print('')
 		print(('nlive: %i' % nlive))
 		print(('Bounding method: %5s' % bound))
@@ -847,19 +869,19 @@ class SingleLensFitter():
 		#Create sampler
 		if self.dynestyparallel:
 			print("Parallel section")
-			with Pool(cpu_count()-1) as executor:
+			cpunum = cpu_count() if self.cpu is None else self.cpu
+			with Pool(cpunum-1) as executor:
 				sampler = NestedSampler(self.lnlike_nest,self.lnprior_nest,ndim,
 					bound=bound,sample=sample,nlive=nlive, \
 						pool=executor,
-						queue_size = cpu_count(),
+						queue_size = cpunum,
 						bootstrap=0)
 
 				sampler.run_nested(dlogz=tol, print_progress=True)#logl_max = -1e-10,dlogz = 1e-20)
 		else:
 			print("Single thread")
 			sampler = NestedSampler(self.lnlike_nest,self.lnprior_nest,ndim,
-					bound=bound,sample=sample,nlive=nlive)
-
+					bound=bound,sample=sample,nlive=nlive,walks=10)
 			#run sampler
 			sampler.run_nested(dlogz=tol, print_progress=True) # Output the progress bar
 
@@ -895,7 +917,7 @@ class SingleLensFitter():
 
 		output = (logZdynesty, logZerrdynesty)
 		print()
-		print(('evidence: %.3f +- %.3f' % (logZdynesty, logZerrdynesty) ))
+		print(('evidence: %.3f +- %.3f' % (output[0],output[1]) ))
 		print()
 		print((res.summary()))
 		print()
@@ -1091,11 +1113,179 @@ class SingleLensFitter():
 		self.fappend(np.asarray(['LogZ:','Logzerr:']),np.asarray([result.logz,result.logzerr]))
 		return
 
-	def fit(self):
+	def fitparallel(self):
+		from multiprocessing import Pool
 		
 		if self.p is None:
 			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
-			return None
+
+		print('Initial parameters:', self.p)
+		print('ln Prob = ',self.lnprob(self.p))
+
+		ndim = self.ndim
+
+		if self.emcee_optimize_first:
+
+			print('Optimising...')
+
+			optimize.minimize(self.neglnprob,self.p,method='Nelder-Mead')
+
+			print('Optimized parameters:', self.p)
+			print('ln Prob = ',self.lnprob(self.p))
+
+		print(ndim, len(self.p), self.nwalkers)
+
+		self.state = [self.p + 1e-8 * np.random.randn(ndim) \
+						for i in range(self.nwalkers)]
+		with Pool() as pool:
+
+			sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.lnprob,pool=pool)
+
+			print("Running burn-in...")
+
+			iteration = 0
+			converged = False
+			steps = 0
+
+			self.count = 0
+
+			print('ndim, walkers, nsteps, max_iterations:', ndim, self.nwalkers, self.nsteps, self.max_burnin_iterations)
+
+			while not converged and iteration < self.max_burnin_iterations:
+
+				self.state, lnp ,_=sampler.run_mcmc(self.state,self.nsteps)
+
+				iteration += 1
+				print('iteration', iteration, 'completed')
+
+				kmax = np.argmax(sampler.flatlnprobability)
+				self.p = sampler.flatchain[kmax,:]
+
+				np.save(self.plotprefix+'-state-burnin',np.asarray(self.state))
+
+				if self.make_plots:
+
+					self.plot_chain(sampler,suffix='-burnin.png')
+
+					ind = 3
+
+					if self.use_finite_source:
+						ind += 1
+
+					npar = 0
+					if self.use_mixture_model:
+						npar += 3
+					if self.use_gaussian_process_model:
+						npar += 2
+
+					if npar > 0:
+
+						for data_set_name in list(self.data.keys()):
+						
+							self.plot_chain(sampler,index=list(range(ind,npar+ind)),  \
+									suffix='-burnin-'+data_set_name+'.png', \
+									labels=self.parameter_labels[ind:ind+npar])
+							ind += npar
+
+					self.plot_combined_lightcurves(t_range = self.plotrange)
+
+				converged = self.emcee_has_converged(sampler,n_steps=self.nsteps)
+				
+
+			np.save(self.plotprefix+'-chain-burnin', sampler.flatchain)
+			np.save(self.plotprefix+'-lnp-burnin',sampler.flatlnprobability)
+			print("Running production...")
+
+			sampler.reset()
+
+			self.state, lnp, _ = sampler.run_mcmc(self.state,self.nsteps_production)
+
+		self.samples = sampler.flatchain
+
+		if self.use_binary_source is True:
+			params = [(v[1], v[2]-v[1], v[1]-v[0]) for v in zip(*np.percentile(self.samples[:,:7], \
+								[16, 50, 84], axis=0))]
+		else:
+			params = [(v[1], v[2]-v[1], v[1]-v[0]) for v in zip(*np.percentile(self.samples[:,:4], \
+								[16, 50, 84], axis=0))]
+
+		self.p = np.asarray(params)[:,0]
+
+		self.u0 = self.p[0]
+		self.t0 = self.p[1]
+		self.tE = self.p[2]
+		if self.use_binary_source is True:
+			self.dist = self.p[3]
+			self.thetabin = self.p[4]
+			self.qlum = self.p[5]
+
+		if self.use_finite_source:
+			self.rho = self.p[self.finite_source_index]
+
+		if self.make_plots:
+
+			self.plot_chain(sampler,suffix='-final.png')
+			ind = 3
+
+			if self.use_finite_source:
+				ind += 1
+
+			if npar > 0:
+
+				for data_set_name in list(self.data.keys()):
+				
+					self.plot_chain(sampler,index=list(range(ind,npar+ind)),  \
+							suffix='-final-'+data_set_name+'.png', \
+							labels=self.parameter_labels[ind:ind+npar])
+					ind += npar
+			self.plot_combined_lightcurves(prefix = 'final_combined')
+			self.plot_lightcurves()
+			self.plot_chain_corner()
+
+		print('Results:')
+		print('u0', params[0])
+		print('t0', params[1])
+		print('tE', params[2])
+		
+		if self.use_binary_source:
+			if self.binary_both is True:
+				print('u02', params[3])
+				print('t02', params[4])
+				print('q', params[5])
+			else:
+				print('d', params[3])
+				print('theta', params[4])
+				print('q', params[5])
+
+		if self.use_finite_source:
+			print('rho', params[self.finite_source_index])
+
+		with open(self.plotprefix+'.fit_results','w') as fid:
+			fid.write('u0 %f %f %f\n'%(params[0][0],params[0][1],params[0][2]))
+			fid.write('t0 %f %f %f\n'%(params[1][0],params[1][1],params[1][2]))
+			fid.write('tE %f %f %f\n'%(params[2][0],params[2][1],params[2][2]))
+			if self.use_binary_source:
+				fid.write('par1 %f %f %f\n'%(params[3][0],params[3][1],params[3][2]))
+				fid.write('par2 %f %f %f\n'%(params[4][0],params[4][1],params[4][2]))
+				fid.write('q %f %f %f\n'%(params[5][0],params[5][1],params[5][2]))
+				
+			if self.use_finite_source:
+				pi = self.finite_source_index
+				fid.write('rho %f %f %f\n'%(params[pi][0],params[pi][1],params[pi][2]))
+
+
+		np.save(self.plotprefix+'-chain-production', sampler.flatchain)
+		np.save(self.plotprefix+'-lnp-production',sampler.flatlnprobability)
+		np.save(self.plotprefix+'-state-production',np.asarray(self.state))
+		np.save(self.plotprefix+'-min_chi2-production',np.asarray(sampler.flatchain[np.argmax(sampler.flatlnprobability)]))
+
+		return
+
+	def fit(self):
+		from multiprocessing import Pool
+		
+		if self.p is None:
+			raise Exception('Error in SingleLensFitter.fit(): No initial_parameters found.')
 
 		print('Initial parameters:', self.p)
 		print('ln Prob = ',self.lnprob(self.p))
@@ -1116,7 +1306,7 @@ class SingleLensFitter():
 		self.state = [self.p + 1e-8 * np.random.randn(ndim) \
 						for i in range(self.nwalkers)]
 
-		sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.lnprob)
+		sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.lnprob,pool=pool)
 
 		print("Running burn-in...")
 
